@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<!--
+  mandarin-cards — offline flashcard trainer for Duolingo Mandarin vocabulary.
+  Static single-page app: no build step, no server, no dependencies.
+  Progress lives in localStorage under the key defined in app.js (STORE_KEY).
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#111417">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>汉字卡 · Mandarin Cards</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header id="topbar">
+  <nav class="tabs">
+    <button class="tab active" data-view="study">Study</button>
+    <button class="tab" data-view="stats">Stats</button>
+    <button class="tab" data-view="setup">Setup</button>
+  </nav>
+  <div id="counter" class="counter"></div>
+</header>
+
+<main>
+
+<!-- ───────────────────────── STUDY ───────────────────────── -->
+<section id="view-study" class="view active">
+
+  <div id="empty" class="empty hidden">
+    <p>No cards in range.</p>
+    <p class="sub">Pick a vocabulary range and at least one direction in <b>Setup</b>.</p>
+  </div>
+
+  <div id="card" class="card">
+    <div class="card-meta">
+      <span id="dir-label" class="pill"></span>
+      <span id="lesson-label" class="pill ghost"></span>
+      <span id="strength-label" class="pill ghost"></span>
+      <span id="extra-label" class="pill ghost hidden">extra rep</span>
+    </div>
+
+    <div class="card-body">
+      <div id="prompt" class="prompt"></div>
+      <div id="answer" class="answer hidden"></div>
+      <div id="extra" class="extra hidden"></div>
+    </div>
+
+    <div class="card-actions">
+      <button id="reveal" class="btn primary wide">Show answer <kbd>space</kbd></button>
+      <div id="grades" class="grades hidden">
+        <button class="btn grade g1" data-grade="0"><span>Again</span><em id="iv0"></em><kbd>1</kbd></button>
+        <button class="btn grade g2" data-grade="1"><span>Hard</span><em id="iv1"></em><kbd>2</kbd></button>
+        <button class="btn grade g3" data-grade="2"><span>Good</span><em id="iv2"></em><kbd>3</kbd></button>
+        <button class="btn grade g4" data-grade="3"><span>Easy</span><em id="iv3"></em><kbd>4</kbd></button>
+      </div>
+    </div>
+  </div>
+
+  <div id="session-line" class="session-line"></div>
+</section>
+
+<!-- ───────────────────────── STATS ───────────────────────── -->
+<section id="view-stats" class="view">
+  <div class="panel">
+    <h2>Coverage</h2>
+    <div id="stat-tiles" class="tiles"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Strength by direction</h2>
+    <p class="hint">Each bar is one direction; segments are cards at each memory level, weakest on the left.
+       A card is <b>mature</b> once its interval passes two weeks.</p>
+    <div id="chart-dirs"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Reviews per day</h2>
+    <div id="chart-history"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Weakest cards</h2>
+    <p class="hint">Most-lapsed first — these are what the queue will keep pushing at you.</p>
+    <div id="weak-list" class="weak-list"></div>
+  </div>
+</section>
+
+<!-- ───────────────────────── SETUP ───────────────────────── -->
+<section id="view-setup" class="view">
+
+  <div class="panel">
+    <h2>Vocabulary range</h2>
+    <p class="hint">Everything from Section 1 Unit 1 up to and including your current Duolingo position.
+       Move this forward as you progress; new words join the queue automatically and nothing already
+       learned is lost.</p>
+    <div class="row">
+      <label for="sel-section">Section</label>
+      <select id="sel-section"></select>
+      <label for="sel-unit">Unit</label>
+      <select id="sel-unit"></select>
+      <span id="range-count" class="range-count"></span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Directions</h2>
+    <p class="hint">Progress is tracked separately for every direction, so knowing 好 → good says nothing
+       about your recall of good → hǎo. Select more than one to shuffle them within a session.</p>
+    <div id="dir-picker" class="dir-picker"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Session</h2>
+    <div class="row">
+      <label for="new-per-day">New cards per day</label>
+      <input id="new-per-day" type="number" min="0" max="200" step="1">
+      <span class="hint inline">per direction; 0 pauses new material</span>
+    </div>
+    <div class="row">
+      <label for="show-tones">Pinyin tone marks</label>
+      <select id="show-tones">
+        <option value="marks">Tone marks (hǎo)</option>
+        <option value="numbers">Tone numbers (hao3)</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Progress data</h2>
+    <p class="hint">Progress is stored in this browser only. Export on one device and import on the
+       other to move it across; import merges by keeping whichever record has seen more reviews.</p>
+    <div class="row wrap">
+      <button id="btn-export" class="btn">Export JSON</button>
+      <button id="btn-import" class="btn">Import JSON</button>
+      <input id="file-import" type="file" accept="application/json,.json" hidden>
+      <button id="btn-reset" class="btn danger">Reset all progress</button>
+    </div>
+    <div id="io-msg" class="io-msg"></div>
+  </div>
+
+  <div class="panel">
+    <h2>About</h2>
+    <p class="hint">
+      Vocabulary from
+      <a href="https://github.com/4044ever/duolingo-chinese-dictionary" target="_blank" rel="noopener">4044ever/duolingo-chinese-dictionary</a>,
+      retrieved 2026-08-10. Keyboard: <kbd>space</kbd> reveals, <kbd>1</kbd>–<kbd>4</kbd> grade,
+      <kbd>u</kbd> undoes the last grade.
+    </p>
+  </div>
+</section>
+
+</main>
+
+<div id="toast" class="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
