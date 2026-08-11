@@ -294,6 +294,28 @@ input[type=number] { width: 80px; }
 
 .io-msg { margin-top: 10px; font-size: 13px; color: var(--fg-dim); min-height: 18px; }
 
+.release-status { font-size: 13px; color: var(--fg-dim); line-height: 1.7; }
+.release-status b { color: var(--fg); font-size: 17px; }
+.release-status .next-up {
+  display: block;
+  margin-top: 2px;
+  font-family: "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", sans-serif;
+}
+
+.meter {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--panel-2);
+  overflow: hidden;
+  margin: 10px 0 12px;
+}
+.meter div {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width .25s ease;
+}
+
 /* ── stats ───────────────────────────────────────────────── */
 
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }

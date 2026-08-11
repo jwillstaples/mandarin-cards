@@ -75,7 +75,7 @@ The queue is served in this order:
 
 1. **Learning** cards (level ≤ 1) once five have accumulated, so the buffer drains.
 2. **Due reviews**, most overdue first, lightly shuffled among the top few.
-3. **New** words in course order, bounded by the daily allowance per direction.
+3. **New** words in course order, drawn from the released pool (see below).
 4. **Extra reps** — a weighted random draw over cards that are not yet due, with weight
 
    *w* ∝ (0.02 + *f*²) · (1 + 0.4·lapses) / (level + 1)^1.5,  *f* = elapsed fraction of the interval.
@@ -89,6 +89,25 @@ Grading an extra rep **does not** advance the schedule. Answering correctly on a
 that wasn't due yet is not evidence you'd still know it at the full interval, so
 *Hard* / *Good* / *Easy* leave the level and due date untouched. *Again* still demotes:
 forgetting early is real information.
+
+## Releasing vocabulary
+
+New words do not trickle in on a schedule. A word enters the queue only once it has been
+**released**, and releasing is a manual act in Setup: `+10` / `+25` / `+50` / `+100`,
+*Release all in range*, or *release everything through Section S Unit U*.
+
+Words are stored in course order and their ids are positions in that order, so the
+release pointer is a single integer — `settings.released` — and a release always hands
+you the words you met earliest. That is the point: vocabulary from months ago should not
+be rationed at twenty a day.
+
+Two escape hatches. **Auto-release per day** (default 0, meaning off) tops the pointer up
+on the first session of each day if you would rather have a drip. **Hold back unstudied
+words** rewinds the pointer to the furthest card you have actually reviewed, undoing an
+over-enthusiastic release without touching any memory you have built.
+
+Progress saved before this existed has no pointer; on first load it is seeded past the
+furthest card on record, so a returning deck is never locked out of its own history.
 
 A 60-day simulation against this scheduler (409 words × 2 directions, a learner who
 misses ~15% of items) introduces every card by day 24, settles at roughly 100 reviews a

@@ -115,12 +115,45 @@
   </div>
 
   <div class="panel">
-    <h2>Session</h2>
-    <div class="row">
-      <label for="new-per-day">New cards per day</label>
-      <input id="new-per-day" type="number" min="0" max="200" step="1">
-      <span class="hint inline">per direction; 0 pauses new material</span>
+    <h2>Release vocabulary</h2>
+    <p class="hint">Only released words enter the queue. Release happens in course order,
+       oldest first, so a batch gives you the words you learned longest ago. Nothing is
+       rationed by the calendar — take as much as you want to study.</p>
+
+    <div id="release-status" class="release-status"></div>
+    <div id="release-meter" class="meter"><div></div></div>
+
+    <div class="row wrap">
+      <button class="btn" data-release="10">+10</button>
+      <button class="btn" data-release="25">+25</button>
+      <button class="btn" data-release="50">+50</button>
+      <button class="btn" data-release="100">+100</button>
+      <button class="btn primary" data-release="all">Release all in range</button>
     </div>
+
+    <p class="hint" style="margin:16px 0 6px">Or release everything up to a point in the course:</p>
+    <div class="row">
+      <label for="rel-section">S</label>
+      <select id="rel-section"></select>
+      <label for="rel-unit">U</label>
+      <select id="rel-unit"></select>
+      <button id="btn-release-through" class="btn">Release through here</button>
+    </div>
+
+    <div class="row" style="margin-top:12px">
+      <label for="auto-release">Auto-release per day</label>
+      <input id="auto-release" type="number" min="0" max="500" step="1">
+      <span class="hint inline">0 keeps release entirely manual</span>
+    </div>
+
+    <div class="row" style="margin-top:12px">
+      <button id="btn-unrelease" class="btn danger">Hold back unstudied words</button>
+      <span class="hint inline">rewinds the pointer to what you have actually seen</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Session</h2>
     <div class="row">
       <label for="show-tones">Pinyin tone marks</label>
       <select id="show-tones">

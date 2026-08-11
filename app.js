@@ -4,7 +4,7 @@
  * independent memory. Records live in state.cards keyed `${wordId}:${dirCode}`.
  *
  * Scheduler: Leitner-style levels with fixed intervals (LEVEL_MIN). Due cards come
- * first; then a bounded daily allowance of new words; then, so a session is never
+ * first; then new words from the manually released pool; then, so a session is never
  * empty and strong cards never fall out of rotation entirely, a weighted-random
  * "filler" draw over not-yet-due cards whose weight rises with elapsed fraction of
  * the interval and falls with level. Weight is strictly positive at every level.
@@ -50,7 +50,8 @@ const DEFAULTS = () => ({
     maxSection: 2,
     maxUnit: 14,
     dirs: ['hz>en'],
-    newPerDay: 20,
+    released: 0,        // words unlocked, counted in course order; see isReleased()
+    autoRelease: 0,     // optional per-day top-up; 0 means release only by hand
     tones: 'marks',
   },
 });
@@ -72,9 +73,27 @@ function load() {
     const got = JSON.parse(raw);
     state = Object.assign(DEFAULTS(), got);
     state.settings = Object.assign(DEFAULTS().settings, got.settings || {});
+    migrate(got);
   } catch (err) {
     console.warn('could not read saved progress, starting fresh', err);
   }
+}
+
+/* Progress saved before manual release existed has no `released` pointer. Anything
+ * already studied was necessarily released, so seed the pointer past the furthest
+ * card on record — otherwise a returning deck would look entirely locked. */
+function migrate(got) {
+  if (typeof (got.settings || {}).released === 'number') return;
+  let furthest = -1;
+  for (const key of Object.keys(state.cards)) {
+    const id = parseInt(key, 10);
+    if (Number.isFinite(id) && id > furthest) furthest = id;
+  }
+  state.settings.released = furthest + 1;
+  // The old daily allowance is deliberately not carried over: release is manual now,
+  // and a surviving drip would quietly add words on top of every batch.
+  state.settings.autoRelease = 0;
+  delete state.settings.newPerDay;
 }
 
 let saveTimer = null;
@@ -159,12 +178,39 @@ function inRange(w) {
 const deck = () => WORDS.filter(inRange);
 const activeDirs = () => state.settings.dirs.filter(c => DIR_BY_CODE[c]);
 
+/* Words are stored in course order, so ids double as a position in the course and
+ * `released` is simply how far down that order the queue is allowed to reach. A word
+ * must be both in range and released before it can be introduced. */
+const isReleased = w => w.id < state.settings.released;
+const released = () => deck().filter(isReleased);
+const heldBack = () => deck().filter(w => !isReleased(w));
+
+/* Release the first n words of the deck that are still held back. */
+function releaseMore(n) {
+  const held = heldBack();
+  if (!held.length) { toast('Everything in range is already released.'); return 0; }
+  const take = Math.min(n, held.length);
+  state.settings.released = held[take - 1].id + 1;
+  save();
+  return take;
+}
+
+function releaseThrough(section, unit) {
+  const upto = WORDS.filter(w => w.s < section || (w.s === section && w.u <= unit));
+  const target = upto.length ? upto[upto.length - 1].id + 1 : 0;
+  const added = deck().filter(w => w.id >= state.settings.released && w.id < target).length;
+  state.settings.released = Math.max(state.settings.released, target);
+  save();
+  return added;
+}
+
 function rollDaily() {
   const k = dayKey();
-  if (state.daily.date !== k) {
-    state.daily = { date: k, used: {} };
-    save();
-  }
+  if (state.daily.date === k) return;
+  state.daily = { date: k, used: {} };
+  const auto = state.settings.autoRelease | 0;
+  if (auto > 0) releaseMore(auto);
+  save();
 }
 
 /* ── scheduling ─────────────────────────────────────────── */
@@ -209,10 +255,6 @@ function grade(g) {
   }
   state.cards[key] = next;
 
-  if (!rec) {
-    const d = current.dir.code;
-    state.daily.used[d] = (state.daily.used[d] || 0) + 1;
-  }
   const dk = dayKey();
   state.hist[dk] = (state.hist[dk] || 0) + 1;
   pruneHist();
@@ -228,10 +270,6 @@ function undo() {
   if (!u) { toast('Nothing to undo.'); return; }
   if (u.before) state.cards[u.key] = u.before;
   else delete state.cards[u.key];
-  if (u.isNew) {
-    const d = u.key.split(':')[1];
-    state.daily.used[d] = Math.max(0, (state.daily.used[d] || 1) - 1);
-  }
   state.hist[u.day] = Math.max(0, (state.hist[u.day] || 1) - 1);
   sessionCount = Math.max(0, sessionCount - 1);
   save();
@@ -246,8 +284,8 @@ function pruneHist() {
   for (const k of keys.slice(0, keys.length - HIST_DAYS)) delete state.hist[k];
 }
 
-/* Pick the next card. Priority: overdue learning → overdue review → new (within the
- * daily allowance) → weighted filler over not-yet-due cards. */
+/* Pick the next card. Priority: overdue learning → overdue review → new (from the
+ * released pool) → weighted filler over not-yet-due cards. */
 function pickNext() {
   rollDaily();
   const dirs = activeDirs();
@@ -258,20 +296,19 @@ function pickNext() {
   const learn = [], review = [], fresh = [], later = [];
 
   for (const d of dirs) {
-    const budget = state.settings.newPerDay - (state.daily.used[d] || 0);
-    let taken = 0;
     for (const w of words) {
       const key = `${w.id}:${d}`;
       const rec = state.cards[key];
       const item = { w, d, key, rec };
       if (!rec) {
-        if (taken < budget) { fresh.push(item); taken++; }
+        if (isReleased(w)) fresh.push(item);   // held-back words never enter the queue
         continue;
       }
       if (rec.due <= t) (rec.l <= 1 ? learn : review).push(item);
       else later.push(item);
     }
   }
+  fresh.sort((a, b) => a.w.id - b.w.id);       // introduce in course order
 
   const notLast = arr => {
     const f = arr.filter(x => x.key !== lastKey);
@@ -328,6 +365,13 @@ function drawCard() {
   if (!current) {
     cardEl.classList.add('hidden');
     emptyEl.classList.remove('hidden');
+    const c = counts();
+    emptyEl.innerHTML = c.held && !c.released
+      ? `<p>No words released yet.</p>
+         <p class="sub">${c.held} words are in range and waiting.
+         Open <b>Setup</b> and release as many as you want to study.</p>`
+      : `<p>No cards in range.</p>
+         <p class="sub">Pick a vocabulary range and at least one direction in <b>Setup</b>.</p>`;
     updateCounter();
     return;
   }
@@ -392,26 +436,34 @@ function counts() {
   const words = deck();
   let due = 0, newLeft = 0, seen = 0, mature = 0;
   for (const d of dirs) {
-    const budget = Math.max(0, state.settings.newPerDay - (state.daily.used[d] || 0));
-    let unseen = 0;
     for (const w of words) {
       const rec = state.cards[`${w.id}:${d}`];
-      if (!rec) { unseen++; continue; }
+      if (!rec) { if (isReleased(w)) newLeft++; continue; }
       seen++;
       if (rec.l >= MATURE_LEVEL) mature++;
       if (rec.due <= t) due++;
     }
-    newLeft += Math.min(unseen, budget);
   }
-  return { due, newLeft, seen, mature, cards: words.length * dirs.length, words: words.length };
+  return {
+    due, newLeft, seen, mature,
+    cards: words.length * dirs.length,
+    words: words.length,
+    released: released().length,
+    held: heldBack().length,
+  };
 }
 
 function updateCounter() {
   const c = counts();
   $('#counter').textContent = `${c.due} due · ${c.newLeft} new · ${sessionCount} done`;
-  $('#session-line').textContent = c.due === 0 && c.newLeft === 0 && sessionCount > 0
-    ? 'Everything due is cleared — these are extra reps drawn from your weaker cards.'
-    : '';
+
+  let line = '';
+  if (c.due === 0 && c.newLeft === 0 && sessionCount > 0) {
+    line = c.held
+      ? `Everything released is under control — ${c.held} more word${c.held === 1 ? '' : 's'} waiting in Setup.`
+      : 'Everything due is cleared — these are extra reps drawn from your weaker cards.';
+  }
+  $('#session-line').textContent = line;
 }
 
 /* ── stats view ─────────────────────────────────────────── */
@@ -509,8 +561,40 @@ function renderSetup() {
       <span class="cjk">${d.label}</span>
     </label>`).join('');
 
-  $('#new-per-day').value = s.newPerDay;
+  $('#auto-release').value = s.autoRelease;
   $('#show-tones').value = s.tones;
+  renderRelease();
+}
+
+function renderRelease() {
+  const d = deck(), rel = released(), held = heldBack();
+  const nDirs = activeDirs().length;
+  const pct = d.length ? (rel.length / d.length * 100) : 0;
+
+  const next = held.length
+    ? `Next up: ${held.slice(0, 3).map(w => w.hz).join(' ')}${held.length > 3 ? ' …' : ''}
+       from S${held[0].s} U${held[0].u}.`
+    : 'Everything in range has been released.';
+
+  $('#release-status').innerHTML =
+    `<b>${rel.length}</b> of ${d.length} words released
+     &nbsp;·&nbsp; ${held.length} held back
+     &nbsp;·&nbsp; ${rel.length * nDirs} cards at ${nDirs} direction${nDirs === 1 ? '' : 's'}
+     <span class="next-up">${next}</span>`;
+  $('#release-meter').firstElementChild.style.width = `${pct.toFixed(1)}%`;
+
+  const selS = $('#rel-section');
+  if (!selS.options.length) {
+    const sections = [...new Set(WORDS.map(w => w.s))].sort((a, b) => a - b);
+    selS.innerHTML = sections.map(n => `<option value="${n}">${n}</option>`).join('');
+    selS.value = state.settings.maxSection;
+  }
+  const selU = $('#rel-unit');
+  const units = maxUnitIn(+selS.value);
+  const keep = +selU.value;
+  selU.innerHTML = Array.from({ length: units }, (_, i) =>
+    `<option value="${i + 1}">${i + 1}</option>`).join('');
+  selU.value = keep >= 1 && keep <= units ? keep : units;
 }
 
 function bindSetup() {
@@ -521,7 +605,9 @@ function bindSetup() {
   });
   $('#sel-unit').addEventListener('change', e => {
     state.settings.maxUnit = +e.target.value;
-    save(); $('#range-count').textContent = `${deck().length} words`; drawCard();
+    save();
+    $('#range-count').textContent = `${deck().length} words`;
+    renderRelease(); drawCard();
   });
   $('#dir-picker').addEventListener('change', () => {
     const picked = [...document.querySelectorAll('#dir-picker input:checked')].map(i => i.value);
@@ -529,10 +615,42 @@ function bindSetup() {
     state.settings.dirs = picked;
     save(); renderSetup(); drawCard();
   });
-  $('#new-per-day').addEventListener('change', e => {
-    state.settings.newPerDay = Math.max(0, Math.min(200, +e.target.value || 0));
-    e.target.value = state.settings.newPerDay;
-    save(); drawCard();
+  document.querySelectorAll('[data-release]').forEach(btn =>
+    btn.addEventListener('click', () => {
+      const spec = btn.dataset.release;
+      const n = spec === 'all' ? heldBack().length : +spec;
+      const got = releaseMore(n);
+      if (got) toast(`Released ${got} word${got === 1 ? '' : 's'}.`);
+      renderRelease(); drawCard();
+    }));
+
+  $('#rel-section').addEventListener('change', renderRelease);
+
+  $('#btn-release-through').addEventListener('click', () => {
+    const added = releaseThrough(+$('#rel-section').value, +$('#rel-unit').value);
+    toast(added ? `Released ${added} more word${added === 1 ? '' : 's'}.`
+                : 'Those units were already released.');
+    renderRelease(); drawCard();
+  });
+
+  $('#auto-release').addEventListener('change', e => {
+    state.settings.autoRelease = Math.max(0, Math.min(500, +e.target.value || 0));
+    e.target.value = state.settings.autoRelease;
+    save();
+  });
+
+  $('#btn-unrelease').addEventListener('click', () => {
+    let furthest = -1;
+    for (const key of Object.keys(state.cards)) {
+      const id = parseInt(key, 10);
+      if (Number.isFinite(id) && id > furthest) furthest = id;
+    }
+    const before = released().length;
+    state.settings.released = furthest + 1;
+    save();
+    const now = released().length;
+    toast(before === now ? 'Nothing to hold back.' : `Held back ${before - now} unstudied words.`);
+    renderRelease(); drawCard();
   });
   $('#show-tones').addEventListener('change', e => {
     state.settings.tones = e.target.value;
