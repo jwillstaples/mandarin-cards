@@ -20,6 +20,7 @@ const LEVEL_MIN = [1, 10, DAY, 3 * DAY, 7 * DAY, 14 * DAY, 30 * DAY, 60 * DAY, 1
 const MAX_LEVEL = LEVEL_MIN.length - 1;
 const MATURE_LEVEL = 5;                 // interval >= 14 days
 const LEARN_BUFFER = 5;                 // learning cards held in flight before draining
+const RECENT_WORDS = 10;                // words kept apart before they may recur
 const HIST_DAYS = 90;
 const UNDO_DEPTH = 30;
 
@@ -62,6 +63,7 @@ let state = DEFAULTS();
 let current = null;          // {word, dir, key, rec}
 let revealed = false;
 let lastKey = null;
+let recentWords = [];        // word ids recently served, newest last; see spaced()
 let undoStack = [];
 let sessionCount = 0;
 
@@ -262,6 +264,8 @@ function grade(g) {
 
   sessionCount++;
   lastKey = key;
+  recentWords.push(current.word.id);
+  if (recentWords.length > RECENT_WORDS) recentWords.shift();
   save();
   drawCard();
 }
@@ -272,6 +276,7 @@ function undo() {
   if (u.before) state.cards[u.key] = u.before;
   else delete state.cards[u.key];
   state.hist[u.day] = Math.max(0, (state.hist[u.day] || 1) - 1);
+  recentWords.pop();
   sessionCount = Math.max(0, sessionCount - 1);
   save();
   toast('Undone.');
@@ -311,13 +316,27 @@ function pickNext() {
   }
   fresh.sort((a, b) => a.w.id - b.w.id);       // introduce in course order
 
-  const notLast = arr => {
-    const f = arr.filter(x => x.key !== lastKey);
-    return f.length ? f : arr;
+  /* Space out the word, not just the card. In a mixed rotation one word owns up to
+   * four cards, and serving them together turns recall into reading the answer off
+   * the previous prompt.
+   *
+   * Returns every candidate tied for least-recently-served. Normally that is all the
+   * words outside the recent window; when the released pool is too small to satisfy
+   * the window it degrades to the ones seen longest ago, which is the widest spacing
+   * still available rather than an immediate repeat. */
+  const spaced = arr => {
+    let oldest = -1, best = [];
+    for (const x of arr) {
+      const i = recentWords.lastIndexOf(x.w.id);
+      const rank = i === -1 ? Infinity : recentWords.length - 1 - i;
+      if (rank > oldest) { oldest = rank; best = [x]; }
+      else if (rank === oldest) best.push(x);
+    }
+    return best.length ? best : arr;
   };
 
   const serveLearn = () => {
-    const pool = notLast(learn);
+    const pool = spaced(learn);
     pool.sort((a, b) => a.rec.due - b.rec.due);
     return pool[0];
   };
@@ -326,15 +345,23 @@ function pickNext() {
   // reviews and new material interleave so a session isn't a wall of one kind.
   if (learn.length >= LEARN_BUFFER) return serveLearn();
   if (review.length) {
-    const pool = notLast(review);
+    const pool = spaced(review);
     pool.sort((a, b) => a.rec.due - b.rec.due);
     // slight shuffle among the most overdue so order isn't identical each session
     return pool[Math.floor(Math.random() * Math.min(5, pool.length))];
   }
-  if (fresh.length) return fresh[0];
+  if (fresh.length) {
+    // Earliest word still eligible, but a random one of its directions: sorting by id
+    // alone is stable, so it would otherwise introduce every word through the same
+    // direction and a mixed session would open with a long run of one kind.
+    const pool = spaced(fresh);
+    const firstId = Math.min(...pool.map(x => x.w.id));
+    const forWord = pool.filter(x => x.w.id === firstId);
+    return forWord[Math.floor(Math.random() * forWord.length)];
+  }
   if (learn.length) return serveLearn();
   if (later.length) {
-    const pool = notLast(later);
+    const pool = spaced(later);
     let total = 0;
     const weights = pool.map(x => {
       const span = Math.max(1, x.rec.due - x.rec.last);

@@ -87,6 +87,18 @@ The queue is served in this order:
 
    *w* ∝ (0.02 + *f*²) · (1 + 0.4·lapses) / (level + 1)^1.5,  *f* = elapsed fraction of the interval.
 
+Across all four steps the queue spaces out the **word**, not just the card. One word owns
+up to four cards, so serving them together would turn recall into reading the answer off
+the previous prompt — you would answer 和 → hé from the 和 → and you saw a second ago. The
+last ten words served are held back from selection; when the released pool is too small
+to honour that, selection degrades to whichever words were seen longest ago rather than
+permitting an immediate repeat. With only three words released and all four directions
+active, the queue rotates them at a gap of three, the widest spacing that exists.
+
+New words are introduced earliest-first but through a **random** one of their directions.
+Sorting by id alone is stable, so it would otherwise introduce every word through the
+same direction, and a mixed session would open with a long run of one kind.
+
 Step 4 is what satisfies "show unfamiliar cards more often but never drop known cards".
 The weight rises steeply as a card approaches its due date and falls with level, so
 weak cards dominate the extras — but it is strictly positive at every level, so a
