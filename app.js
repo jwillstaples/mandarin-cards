@@ -50,6 +50,7 @@ const DEFAULTS = () => ({
     maxSection: 2,
     maxUnit: 14,
     dirs: ['hz>en'],
+    hzAnswer: 'en',     // remembered answer side for 汉字 prompts, which allow both
     released: 0,        // words unlocked, counted in course order; see isReleased()
     autoRelease: 0,     // optional per-day top-up; 0 means release only by hand
     tones: 'marks',
@@ -424,6 +425,62 @@ function reveal() {
   $('#grades').classList.remove('hidden');
 }
 
+/* ── direction switcher ─────────────────────────────────── */
+
+/* The Study bar drives settings.dirs directly. A single active direction shows as its
+ * prompt side; anything else reads as "Mix". Pīnyīn and English prompts admit only one
+ * answer side, so those buttons are disabled rather than hidden — the row keeps its
+ * height and the constraint stays visible. */
+const ANSWER_FOR = { py: 'en', en: 'py' };
+
+function promptMode() {
+  const d = activeDirs();
+  return d.length === 1 ? DIR_BY_CODE[d[0]].from : 'mix';
+}
+
+function setPrompt(mode) {
+  const s = state.settings;
+  if (mode === 'mix') s.dirs = DIRS.map(d => d.code);
+  else if (mode === 'hz') s.dirs = [`hz>${s.hzAnswer || 'en'}`];
+  else s.dirs = [`${mode}>${ANSWER_FOR[mode]}`];
+  save();
+  renderDirBar();
+  drawCard();
+}
+
+function setAnswer(side) {
+  const s = state.settings;
+  s.hzAnswer = side;
+  if (promptMode() === 'hz') s.dirs = [`hz>${side}`];
+  save();
+  renderDirBar();
+  drawCard();
+}
+
+function renderDirBar() {
+  const mode = promptMode();
+  document.querySelectorAll('#seg-prompt button').forEach(b =>
+    b.classList.toggle('on', b.dataset.prompt === mode));
+
+  const answer = mode === 'hz' ? (state.settings.hzAnswer || 'en') : ANSWER_FOR[mode];
+  document.querySelectorAll('#seg-answer button').forEach(b => {
+    const side = b.dataset.answer;
+    b.classList.toggle('on', mode !== 'mix' && side === answer);
+    b.disabled = mode !== 'hz';
+  });
+}
+
+function renderReleaseBar() {
+  const held = heldBack().length;
+  const bar = $('#release-bar');
+  bar.classList.toggle('hidden', held === 0);
+  if (held) {
+    const next = heldBack()[0];
+    $('#release-bar-label').textContent =
+      `${held} word${held === 1 ? '' : 's'} held back, from S${next.s} U${next.u} — add`;
+  }
+}
+
 function bucketOf(rec) {
   for (const b of BUCKETS) if (b.test(rec)) return b;
   return BUCKETS[BUCKETS.length - 1];
@@ -464,6 +521,7 @@ function updateCounter() {
       : 'Everything due is cleared — these are extra reps drawn from your weaker cards.';
   }
   $('#session-line').textContent = line;
+  renderReleaseBar();
 }
 
 /* ── stats view ─────────────────────────────────────────── */
@@ -613,17 +671,11 @@ function bindSetup() {
     const picked = [...document.querySelectorAll('#dir-picker input:checked')].map(i => i.value);
     if (!picked.length) { toast('Keep at least one direction.'); renderSetup(); return; }
     state.settings.dirs = picked;
-    save(); renderSetup(); drawCard();
+    if (picked.length === 1 && DIR_BY_CODE[picked[0]].from === 'hz') {
+      state.settings.hzAnswer = DIR_BY_CODE[picked[0]].to;
+    }
+    save(); renderSetup(); renderDirBar(); drawCard();
   });
-  document.querySelectorAll('[data-release]').forEach(btn =>
-    btn.addEventListener('click', () => {
-      const spec = btn.dataset.release;
-      const n = spec === 'all' ? heldBack().length : +spec;
-      const got = releaseMore(n);
-      if (got) toast(`Released ${got} word${got === 1 ? '' : 's'}.`);
-      renderRelease(); drawCard();
-    }));
-
   $('#rel-section').addEventListener('change', renderRelease);
 
   $('#btn-release-through').addEventListener('click', () => {
@@ -719,6 +771,25 @@ function bind() {
   document.querySelectorAll('.tab').forEach(t =>
     t.addEventListener('click', () => showView(t.dataset.view)));
 
+  // Release buttons appear on both Study and Setup; one handler serves both.
+  document.querySelectorAll('[data-release]').forEach(btn =>
+    btn.addEventListener('click', () => {
+      const spec = btn.dataset.release;
+      const got = releaseMore(spec === 'all' ? heldBack().length : +spec);
+      if (got) toast(`Added ${got} word${got === 1 ? '' : 's'}.`);
+      renderRelease();
+      drawCard();
+    }));
+
+  $('#seg-prompt').addEventListener('click', e => {
+    const b = e.target.closest('[data-prompt]');
+    if (b) setPrompt(b.dataset.prompt);
+  });
+  $('#seg-answer').addEventListener('click', e => {
+    const b = e.target.closest('[data-answer]');
+    if (b && !b.disabled) setAnswer(b.dataset.answer);
+  });
+
   $('#reveal').addEventListener('click', reveal);
   $('.card-body').addEventListener('click', () => revealed || reveal());
   $('#grades').addEventListener('click', e => {
@@ -755,6 +826,7 @@ async function main() {
   }
   bind();
   rollDaily();
+  renderDirBar();
   drawCard();
 }
 

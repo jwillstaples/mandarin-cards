@@ -62,6 +62,13 @@ A **card** is a (word, direction) pair. The four directions are 汉字→English
 memory — recognising 好 tells you nothing about producing hǎo from "good", so they are
 not conflated.
 
+The direction is switched from the Study page itself: a prompt row (汉字 / Pīnyīn /
+English / Mix) and an answer row. Pīnyīn and English prompts admit only one answer side,
+so those buttons are disabled rather than hidden — the row keeps its height and the
+constraint stays visible. **Mix** puts all four directions in one rotation. The Setup
+checkboxes remain the general control and the two stay in sync; any selection of more
+than one direction reads as Mix.
+
 Each card sits at a **level** 0–8 with a fixed interval:
 
 | Level | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
@@ -93,8 +100,10 @@ forgetting early is real information.
 ## Releasing vocabulary
 
 New words do not trickle in on a schedule. A word enters the queue only once it has been
-**released**, and releasing is a manual act in Setup: `+10` / `+25` / `+50` / `+100`,
-*Release all in range*, or *release everything through Section S Unit U*.
+**released**, and releasing is a manual act: `+10` / `+25` / `+50` / `+100`, *Release all
+in range*, or *release everything through Section S Unit U* in Setup, and a compact
+`+10 +25 +50 all` bar under the card on the Study page, which appears whenever anything
+is still held back and reports where the next batch starts.
 
 Words are stored in course order and their ids are positions in that order, so the
 release pointer is a single integer — `settings.released` — and a release always hands

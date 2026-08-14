@@ -121,6 +121,48 @@ main {
 .view.active { display: flex; }
 .hidden { display: none !important; }
 
+/* ── direction switcher ──────────────────────────────────── */
+
+.dirbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.seg {
+  display: flex;
+  flex: 1 1 auto;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 3px;
+  gap: 3px;
+}
+
+.seg button {
+  flex: 1;
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--fg-dim);
+  font: inherit;
+  font-size: 13px;
+  padding: 7px 6px;
+  border-radius: 7px;
+  cursor: pointer;
+  white-space: nowrap;
+  touch-action: manipulation;
+}
+.seg button.cjk {
+  font-family: "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", sans-serif;
+}
+.seg button.on { background: var(--accent); color: #fff; font-weight: 600; }
+.seg button:disabled { opacity: .38; cursor: default; }
+.seg button:disabled.on { background: var(--line); color: var(--fg-dim); opacity: .75; }
+
+#seg-prompt { flex-grow: 2; }
+
 /* ── card ────────────────────────────────────────────────── */
 
 .card {
@@ -131,7 +173,7 @@ main {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 14px;
-  min-height: 60vh;
+  min-height: 48vh;
 }
 
 .card-meta { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -241,6 +283,22 @@ main {
   text-align: center;
   min-height: 18px;
 }
+
+.release-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  font-size: 12px;
+  color: var(--fg-dim);
+}
+.release-bar-btns { display: flex; gap: 6px; margin-left: auto; }
+.btn.small { padding: 6px 11px; font-size: 13px; border-radius: 8px; }
 
 .empty { text-align: center; padding: 60px 20px; color: var(--fg-dim); }
 .empty .sub { font-size: 14px; }
@@ -388,11 +446,13 @@ input[type=number] { width: 80px; }
 
 /* ── toast ───────────────────────────────────────────────── */
 
+/* Anchored to the top: the bottom of the screen belongs to the grade buttons and the
+   release bar, and a toast landing on the control just tapped reads as a misfire. */
 .toast {
   position: fixed;
   left: 50%;
-  bottom: calc(20px + env(safe-area-inset-bottom));
-  transform: translate(-50%, 20px);
+  top: calc(16px + env(safe-area-inset-top));
+  transform: translate(-50%, -20px);
   background: var(--panel-2);
   border: 1px solid var(--line);
   color: var(--fg);
@@ -403,5 +463,6 @@ input[type=number] { width: 80px; }
   pointer-events: none;
   transition: opacity .18s, transform .18s;
   z-index: 20;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .3);
 }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }

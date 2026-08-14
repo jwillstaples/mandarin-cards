@@ -31,6 +31,19 @@
 <!-- ───────────────────────── STUDY ───────────────────────── -->
 <section id="view-study" class="view active">
 
+  <div class="dirbar">
+    <div class="seg" id="seg-prompt" role="group" aria-label="Prompt with">
+      <button data-prompt="hz" class="cjk">汉字</button>
+      <button data-prompt="py">Pīnyīn</button>
+      <button data-prompt="en">English</button>
+      <button data-prompt="mix">Mix</button>
+    </div>
+    <div class="seg" id="seg-answer" role="group" aria-label="Answer with">
+      <button data-answer="en">answer English</button>
+      <button data-answer="py">answer Pīnyīn</button>
+    </div>
+  </div>
+
   <div id="empty" class="empty hidden">
     <p>No cards in range.</p>
     <p class="sub">Pick a vocabulary range and at least one direction in <b>Setup</b>.</p>
@@ -62,6 +75,16 @@
   </div>
 
   <div id="session-line" class="session-line"></div>
+
+  <div id="release-bar" class="release-bar hidden">
+    <span id="release-bar-label"></span>
+    <span class="release-bar-btns">
+      <button class="btn small" data-release="10">+10</button>
+      <button class="btn small" data-release="25">+25</button>
+      <button class="btn small" data-release="50">+50</button>
+      <button class="btn small" data-release="all">all</button>
+    </span>
+  </div>
 </section>
 
 <!-- ───────────────────────── STATS ───────────────────────── -->
