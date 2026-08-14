@@ -21,6 +21,8 @@ const MAX_LEVEL = LEVEL_MIN.length - 1;
 const MATURE_LEVEL = 5;                 // interval >= 14 days
 const LEARN_BUFFER = 5;                 // learning cards held in flight before draining
 const RECENT_WORDS = 10;                // words kept apart before they may recur
+const NEW_JITTER = 4;                   // earliest new words to choose among at random
+const TEMP_MAX = 2;                     // temperature at which sampling is fully uniform
 const HIST_DAYS = 90;
 const UNDO_DEPTH = 30;
 
@@ -54,6 +56,7 @@ const DEFAULTS = () => ({
     hzAnswer: 'en',     // remembered answer side for 汉字 prompts, which allow both
     released: 0,        // words unlocked, counted in course order; see isReleased()
     autoRelease: 0,     // optional per-day top-up; 0 means release only by hand
+    temperature: 1,     // 0 = strict overdue order, TEMP_MAX = uniform shuffle
     tones: 'marks',
   },
 });
@@ -225,10 +228,26 @@ function nextLevel(level, grade) {
   return Math.min(MAX_LEVEL, level + 2);
 }
 
+/* Draw one item with probability proportional to weightOf(item, index). */
+function weightedPick(items, weightOf) {
+  let total = 0;
+  const weights = items.map((x, i) => {
+    const w = Math.max(1e-9, weightOf(x, i));
+    total += w;
+    return w;
+  });
+  let r = Math.random() * total;
+  for (let i = 0; i < items.length; i++) {
+    r -= weights[i];
+    if (r <= 0) return items[i];
+  }
+  return items[items.length - 1];
+}
+
 function intervalFor(level) {
   const base = LEVEL_MIN[level];
   if (base < DAY) return base;
-  return base * (0.95 + Math.random() * 0.1);   // fuzz to stop day-clumping
+  return base * (0.9 + Math.random() * 0.2);    // fuzz to stop day-clumping and lockstep
 }
 
 function grade(g) {
@@ -335,47 +354,67 @@ function pickNext() {
     return best.length ? best : arr;
   };
 
-  const serveLearn = () => {
-    const pool = spaced(learn);
-    pool.sort((a, b) => a.rec.due - b.rec.due);
-    return pool[0];
+  /* How far past due, as a multiple of the card's own interval, so a day late on a
+   * 1-day card counts the same as a month late on a 30-day one. */
+  const overdue = x => (t - x.rec.due) / Math.max(60000, LEVEL_MIN[x.rec.l] * 60000);
+
+  /* Due cards are sampled, not sorted. Strict due order is self-perpetuating: cards
+   * graded in sequence get due times in that same sequence and come back in it
+   * forever, so you end up learning the running order instead of the words.
+   *
+   * `temperature` sets how much overdueness biases the draw. Scores are normalised by
+   * the largest before exponentiation, so weights stay in (0, 1] and a very overdue
+   * card cannot overflow the sum:
+   *
+   *     w = (score / max score) ^ e,    e = TEMP_MAX/T - 1
+   *
+   * The exponent diverges as T → 0, concentrating all weight on the most overdue card
+   * (special-cased, since the limit is not computable), passes through e = 1 at the
+   * midpoint T = 1, where the draw is exactly proportional to lateness, and reaches 0
+   * at TEMP_MAX, where every weight is 1 and the draw is a true uniform shuffle. The
+   * sweep is continuous: no step to uniform at the last notch. */
+  const serveDue = pool => {
+    if (pool.length === 1) return pool[0];
+    const T = state.settings.temperature;
+    const scores = pool.map(x => 1 + 2 * Math.max(0, overdue(x)));
+
+    if (T <= 0) {
+      let best = 0;
+      for (let i = 1; i < pool.length; i++) if (scores[i] > scores[best]) best = i;
+      return pool[best];
+    }
+
+    const top = Math.max(...scores);
+    const e = TEMP_MAX / T - 1;
+    if (e <= 0) return pool[Math.floor(Math.random() * pool.length)];
+    return weightedPick(pool, (x, i) => Math.pow(scores[i] / top, e));
   };
+
+  const serveLearn = () => serveDue(spaced(learn));
 
   // Drain the learning buffer once it grows past LEARN_BUFFER, otherwise let
   // reviews and new material interleave so a session isn't a wall of one kind.
   if (learn.length >= LEARN_BUFFER) return serveLearn();
-  if (review.length) {
-    const pool = spaced(review);
-    pool.sort((a, b) => a.rec.due - b.rec.due);
-    // slight shuffle among the most overdue so order isn't identical each session
-    return pool[Math.floor(Math.random() * Math.min(5, pool.length))];
-  }
+  if (review.length) return serveDue(spaced(review));
   if (fresh.length) {
-    // Earliest word still eligible, but a random one of its directions: sorting by id
-    // alone is stable, so it would otherwise introduce every word through the same
-    // direction and a mixed session would open with a long run of one kind.
+    /* Introduce roughly in course order, but jittered across the earliest few words
+     * and through a random one of the word's directions. Strict order here would seed
+     * every later review cycle with the same sequence. */
     const pool = spaced(fresh);
-    const firstId = Math.min(...pool.map(x => x.w.id));
-    const forWord = pool.filter(x => x.w.id === firstId);
+    const ids = [...new Set(pool.map(x => x.w.id))].sort((a, b) => a - b);
+    const jitter = state.settings.temperature <= 0 ? 1 : NEW_JITTER;
+    const pick = ids[Math.floor(Math.random() * Math.min(jitter, ids.length))];
+    const forWord = pool.filter(x => x.w.id === pick);
     return forWord[Math.floor(Math.random() * forWord.length)];
   }
   if (learn.length) return serveLearn();
   if (later.length) {
     const pool = spaced(later);
-    let total = 0;
-    const weights = pool.map(x => {
+    return { ...weightedPick(pool, x => {
       const span = Math.max(1, x.rec.due - x.rec.last);
       const frac = Math.min(1, (t - x.rec.last) / span);
-      const w = (0.02 + frac * frac) / Math.pow(x.rec.l + 1, 1.5) * (1 + 0.4 * x.rec.lapses);
-      total += w;
-      return w;
-    });
-    let r = Math.random() * total;
-    for (let i = 0; i < pool.length; i++) {
-      r -= weights[i];
-      if (r <= 0) return { ...pool[i], extra: true };
-    }
-    return { ...pool[pool.length - 1], extra: true };
+      return (0.02 + frac * frac) / Math.pow(x.rec.l + 1, 1.5) * (1 + 0.4 * x.rec.lapses);
+    }), extra: true };
   }
   return null;
 }
@@ -647,8 +686,23 @@ function renderSetup() {
     </label>`).join('');
 
   $('#auto-release').value = s.autoRelease;
+  $('#temperature').value = s.temperature;
   $('#show-tones').value = s.tones;
+  renderTemp();
   renderRelease();
+}
+
+function renderTemp() {
+  const T = state.settings.temperature;
+  const desc =
+    T <= 0     ? 'the most overdue card is always next, and the order repeats exactly.'
+    : T >= TEMP_MAX ? 'every due card is equally likely; lateness is ignored entirely.'
+    : T < 0.6  ? 'late cards dominate heavily, with a little give in the order.'
+    : T < 1.3  ? 'late cards come first, but the order varies run to run.'
+    :            'close to a shuffle, with a mild pull toward late cards.';
+  const exp = T <= 0 ? '∞' : (TEMP_MAX / T - 1).toFixed(2);
+  $('#temp-label').innerHTML =
+    `<b>T = ${T.toFixed(1)}</b> &nbsp;(exponent ${exp}) — ${desc}`;
 }
 
 function renderRelease() {
@@ -710,6 +764,12 @@ function bindSetup() {
     toast(added ? `Released ${added} more word${added === 1 ? '' : 's'}.`
                 : 'Those units were already released.');
     renderRelease(); drawCard();
+  });
+
+  $('#temperature').addEventListener('input', e => {
+    state.settings.temperature = Math.max(0, Math.min(TEMP_MAX, +e.target.value || 0));
+    save();
+    renderTemp();
   });
 
   $('#auto-release').addEventListener('change', e => {

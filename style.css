@@ -352,6 +352,46 @@ input[type=number] { width: 80px; }
 
 .io-msg { margin-top: 10px; font-size: 13px; color: var(--fg-dim); min-height: 18px; }
 
+.slider {
+  appearance: none;
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent), var(--panel-2));
+  outline: none;
+  margin: 4px 0 0;
+}
+.slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--fg);
+  border: 3px solid var(--accent);
+  cursor: pointer;
+}
+.slider::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--fg);
+  border: 3px solid var(--accent);
+  cursor: pointer;
+}
+
+.slider-scale {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--fg-dim);
+  margin-top: 4px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.temp-label { margin-top: 10px; font-size: 13px; color: var(--fg-dim); }
+.temp-label b { color: var(--fg); font-size: 15px; }
+
 .release-status { font-size: 13px; color: var(--fg-dim); line-height: 1.7; }
 .release-status b { color: var(--fg); font-size: 17px; }
 .release-status .next-up {

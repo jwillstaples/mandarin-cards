@@ -76,16 +76,39 @@ Each card sits at a **level** 0–8 with a fixed interval:
 | Interval | 1 min | 10 min | 1 d | 3 d | 7 d | 14 d | 30 d | 60 d | 120 d |
 
 Grading moves the level: *Again* → 0, *Hard* → −1, *Good* → +1, *Easy* → +2. Intervals
-of a day or more get ±5% random fuzz so reviews don't clump onto the same days.
+of a day or more get ±10% random fuzz so reviews don't clump onto the same days, and so
+a batch graded together doesn't come back in lockstep.
 
 The queue is served in this order:
 
 1. **Learning** cards (level ≤ 1) once five have accumulated, so the buffer drains.
-2. **Due reviews**, most overdue first, lightly shuffled among the top few.
+2. **Due reviews**, sampled with a bias toward the most overdue — see *Temperature*.
 3. **New** words in course order, drawn from the released pool (see below).
 4. **Extra reps** — a weighted random draw over cards that are not yet due, with weight
 
    *w* ∝ (0.02 + *f*²) · (1 + 0.4·lapses) / (level + 1)^1.5,  *f* = elapsed fraction of the interval.
+
+### Temperature
+
+A **Temperature** slider in Setup governs how much lateness biases the draw. Cards score
+`1 + 2 x (intervals past due)`, scores are normalised by the largest in the pool, and the
+weight is
+
+    w = (score / max score) ^ e,    e = T_max/T - 1,    T_max = 2
+
+so `T = 0` always serves the most overdue card (special-cased, since the exponent
+diverges), `T = 1` draws in proportion to lateness, and `T = 2` gives every due card equal
+probability. The sweep is continuous and exact at both ends. Measured over 20,000 draws
+from a pool of ten cards spanning zero to nine intervals overdue, entropy relative to
+uniform runs 0.00 at `T = 0`, 0.72 at 0.5, 0.92 at 1.0, 0.98 at 1.5 and 1.00 at 2.0 — every
+notch on the slider changes the distribution.
+
+Two runs from an identical saved state under the old strict-order policy had Spearman
+rank correlation 0.947 — effectively the same running order every time, which is what
+made the sequence learnable. Sampling drops that to roughly 0.2 at the default `T = 1`.
+
+`T = 0` also switches new-word introduction to strict course order, so the whole queue is
+deterministic at zero.
 
 Across all four steps the queue spaces out the **word**, not just the card. One word owns
 up to four cards, so serving them together would turn recall into reading the answer off
