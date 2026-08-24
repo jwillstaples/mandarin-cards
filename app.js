@@ -47,6 +47,8 @@ const BUCKETS = [
 const DEFAULTS = () => ({
   v: 1,
   cards: {},                                   // "id:dir" -> {l, due, reps, lapses, last}
+  notes: {},                                   // word id -> free text, surfaced on a miss
+  edits: {},                                   // word id -> {hz, py, en} overriding the shipped data
   hist: {},                                    // "YYYY-MM-DD" -> review count
   daily: { date: '', used: {} },               // new cards introduced today, per direction
   settings: {
@@ -61,7 +63,8 @@ const DEFAULTS = () => ({
   },
 });
 
-let WORDS = [];
+let BASE_WORDS = [];         // pristine, as shipped in data/vocab.json
+let WORDS = [];              // BASE_WORDS with the user's edits layered on
 let state = DEFAULTS();
 let current = null;          // {word, dir, key, rec}
 let revealed = false;
@@ -173,6 +176,31 @@ function field(word, which) {
   if (which === 'py') return showPinyin(word.py);
   return word.en.join(' / ');
 }
+
+/* ── user edits ─────────────────────────────────────────── */
+
+/* data/vocab.json is read-only and gets replaced wholesale when the vocabulary is
+ * refreshed, so corrections live separately in state.edits and are layered on at
+ * load. Keeping BASE_WORDS pristine is what makes "revert to original" possible. */
+function applyEdits() {
+  WORDS = BASE_WORDS.map(w => {
+    const e = state.edits[w.id];
+    if (!e) return w;
+    return {
+      ...w,
+      hz: e.hz || w.hz,
+      py: e.py || w.py,
+      en: e.en && e.en.length ? e.en : w.en,
+      edited: true,
+    };
+  });
+}
+
+const wordById = id => WORDS[id] && WORDS[id].id === id
+  ? WORDS[id]
+  : WORDS.find(w => w.id === id);
+
+const noteFor = id => (state.notes[id] || '').trim();
 
 /* ── deck selection ─────────────────────────────────────── */
 
@@ -286,6 +314,10 @@ function grade(g) {
   recentWords.push(current.word.id);
   if (recentWords.length > RECENT_WORDS) recentWords.shift();
   save();
+
+  // A miss is the moment the note is worth reading and worth writing, so hold the
+  // queue here rather than flashing the note past on the way to the next card.
+  if (g === 0) { openNote(current.word.id); return; }
   drawCard();
 }
 
@@ -421,11 +453,15 @@ function pickNext() {
 
 /* ── study view ─────────────────────────────────────────── */
 
-function drawCard() {
-  const pick = pickNext();
-  current = pick && {
-    word: pick.w, dir: DIR_BY_CODE[pick.d], key: pick.key, rec: pick.rec, extra: !!pick.extra,
-  };
+function drawCard(keep) {
+  if (keep) {
+    current = keep;
+  } else {
+    const pick = pickNext();
+    current = pick && {
+      word: pick.w, dir: DIR_BY_CODE[pick.d], key: pick.key, rec: pick.rec, extra: !!pick.extra,
+    };
+  }
   revealed = false;
 
   const cardEl = $('#card'), emptyEl = $('#empty');
@@ -453,6 +489,7 @@ function drawCard() {
     ? `${bucketOf(rec).name} · ${fmtInterval(LEVEL_MIN[rec.l])}`
     : 'New';
   $('#extra-label').classList.toggle('hidden', !current.extra);
+  $('#note-label').classList.toggle('hidden', !noteFor(word.id));
 
   const p = $('#prompt');
   p.textContent = field(word, dir.from);
@@ -465,9 +502,11 @@ function drawCard() {
   // context: whichever of the three fields was neither prompt nor answer
   const shown = new Set([dir.from, dir.to]);
   const rest = ['hz', 'py', 'en'].filter(k => !shown.has(k));
+  const note = noteFor(word.id);
   $('#extra').innerHTML = rest
-    .map(k => k === 'hz' ? `<span class="x-hz">${word.hz}</span>` : field(word, k))
-    .join(' &nbsp;·&nbsp; ');
+    .map(k => k === 'hz' ? `<span class="x-hz">${esc(word.hz)}</span>` : esc(field(word, k)))
+    .join(' &nbsp;·&nbsp; ')
+    + (note ? `<div class="card-note">${esc(note)}</div>` : '');
   $('#extra').classList.add('hidden');
 
   $('#reveal').classList.remove('hidden');
@@ -590,6 +629,138 @@ function updateCounter() {
   renderReleaseBar();
 }
 
+/* ── notes ──────────────────────────────────────────────── */
+
+let noteWordId = null;
+
+function wordLine(w) {
+  return `<span class="hz">${esc(w.hz)}</span>
+          <span class="py">${esc(showPinyin(w.py))}</span>
+          <span class="en">${esc(w.en.join(' / '))}</span>`;
+}
+
+function openNote(id) {
+  noteWordId = id;
+  const w = wordById(id);
+  if (!w) { drawCard(); return; }
+  $('#note-word').innerHTML = wordLine(w);
+  $('#note-text').value = state.notes[id] || '';
+  $('#card').classList.add('hidden');
+  $('#empty').classList.add('hidden');
+  $('#note-panel').classList.remove('hidden');
+}
+
+function closeNote() {
+  if (noteWordId === null) return;
+  saveNoteField();
+  noteWordId = null;
+  $('#note-panel').classList.add('hidden');
+  drawCard();
+}
+
+function saveNoteField() {
+  if (noteWordId === null) return;
+  const text = $('#note-text').value.trim();
+  if (text) state.notes[noteWordId] = text;
+  else delete state.notes[noteWordId];
+  save();
+}
+
+/* ── edit dialog ────────────────────────────────────────── */
+
+let editWordId = null;
+
+const esc = str => String(str).replace(/[&<>"']/g,
+  c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+const splitGlosses = str =>
+  str.split('/').map(g => g.trim()).filter(Boolean);
+
+function openEdit(id) {
+  const w = wordById(id);
+  if (!w) return;
+  editWordId = id;
+  const base = BASE_WORDS[id];
+  $('#edit-hz').value = w.hz;
+  $('#edit-py').value = w.py;
+  $('#edit-en').value = w.en.join(' / ');
+  $('#edit-note').value = state.notes[id] || '';
+  $('#edit-origin').textContent = state.edits[id]
+    ? `Edited. Originally ${base.hz} · ${base.py} · ${base.en.join(' / ')} (S${w.s} U${w.u}).`
+    : `From Section ${w.s}, Unit ${w.u}.`;
+  $('#edit-revert').classList.toggle('hidden', !state.edits[id]);
+  $('#edit-modal').classList.remove('hidden');
+  $('#edit-hz').focus();
+}
+
+function closeEdit() {
+  editWordId = null;
+  $('#edit-modal').classList.add('hidden');
+}
+
+function saveEdit() {
+  if (editWordId === null) return;
+  const id = editWordId;
+  const base = BASE_WORDS[id];
+  const hz = $('#edit-hz').value.trim();
+  const py = $('#edit-py').value.trim();
+  const en = splitGlosses($('#edit-en').value);
+
+  if (!hz || !py || !en.length) {
+    toast('Hanzi, pinyin and at least one English meaning are all required.');
+    return;
+  }
+
+  // Store only genuine differences, so a word reverts to the shipped data by itself
+  // once the field is typed back — and a vocabulary refresh can still improve it.
+  const diff = {};
+  if (hz !== base.hz) diff.hz = hz;
+  if (py !== base.py) diff.py = py;
+  if (en.join('\u0000') !== base.en.join('\u0000')) diff.en = en;
+
+  if (Object.keys(diff).length) state.edits[id] = diff;
+  else delete state.edits[id];
+
+  const note = $('#edit-note').value.trim();
+  if (note) state.notes[id] = note;
+  else delete state.notes[id];
+
+  applyEdits();
+  save();
+  closeEdit();
+  toast(Object.keys(diff).length ? 'Card saved.' : 'Card matches the original again.');
+  refreshAfterEdit(id);
+}
+
+function revertEdit() {
+  if (editWordId === null) return;
+  const id = editWordId;
+  delete state.edits[id];
+  applyEdits();
+  save();
+  closeEdit();
+  toast('Reverted to the shipped card.');
+  refreshAfterEdit(id);
+}
+
+/* An edit can change the word currently on screen, or the one the note panel is
+ * showing; re-render whichever is live rather than advancing the queue. */
+function refreshAfterEdit(id) {
+  if (noteWordId !== null) {
+    $('#note-word').innerHTML = wordLine(wordById(noteWordId));
+    $('#note-text').value = state.notes[noteWordId] || '';
+    return;
+  }
+  if (current && current.word.id === id) {
+    const wasRevealed = revealed;
+    current.word = wordById(id);
+    drawCard(current);
+    if (wasRevealed) reveal();
+    return;
+  }
+  if ($('#view-stats').classList.contains('active')) renderStats();
+}
+
 /* ── stats view ─────────────────────────────────────────── */
 
 function renderStats() {
@@ -649,10 +820,10 @@ function renderStats() {
   }
   seen.sort((a, b) => (b.rec.lapses - a.rec.lapses) || (a.rec.l - b.rec.l) || (a.rec.due - b.rec.due));
   $('#weak-list').innerHTML = seen.slice(0, 25).map(x => `
-    <div class="weak-row">
-      <span class="hz">${x.w.hz}</span>
-      <span class="py">${showPinyin(x.w.py)}</span>
-      <span class="en">${x.w.en.join(' / ')}</span>
+    <div class="weak-row" data-word="${x.w.id}" title="Edit this card">
+      <span class="hz">${esc(x.w.hz)}</span>
+      <span class="py">${esc(showPinyin(x.w.py))}</span>
+      <span class="en">${esc(x.w.en.join(' / '))}${noteFor(x.w.id) ? ' <i class="mark">note</i>' : ''}${x.w.edited ? ' <i class="mark">edited</i>' : ''}</span>
       <span class="tag">${x.d.short} · ${x.rec.lapses} lapse${x.rec.lapses === 1 ? '' : 's'} · ${fmtInterval(LEVEL_MIN[x.rec.l])}</span>
     </div>`).join('') || '<p class="hint">Nothing reviewed yet.</p>';
 }
@@ -822,9 +993,22 @@ function bindSetup() {
       for (const [d, n] of Object.entries(got.hist || {})) {
         state.hist[d] = Math.max(state.hist[d] || 0, n);
       }
+      let notes = 0, edits = 0;
+      for (const [id, text] of Object.entries(got.notes || {})) {
+        // Never silently drop a note written on the other device: keep both.
+        const mine = (state.notes[id] || '').trim(), theirs = (text || '').trim();
+        if (!theirs || mine === theirs) continue;
+        state.notes[id] = mine ? `${mine}\n\n${theirs}` : theirs;
+        notes++;
+      }
+      for (const [id, e] of Object.entries(got.edits || {})) {
+        if (!state.edits[id]) { state.edits[id] = e; edits++; }
+      }
+      applyEdits();
       pruneHist();
       save();
-      $('#io-msg').textContent = `Imported: ${added} new records, ${merged} updated.`;
+      $('#io-msg').textContent =
+        `Imported: ${added} new records, ${merged} updated, ${notes} notes, ${edits} edited cards.`;
       drawCard();
     } catch (err) {
       $('#io-msg').textContent = `Import failed: ${err.message}`;
@@ -839,6 +1023,7 @@ function bindSetup() {
     state.settings = keep;
     undoStack = [];
     sessionCount = 0;
+    applyEdits();
     save();
     $('#io-msg').textContent = 'Progress reset.';
     drawCard();
@@ -877,6 +1062,28 @@ function bind() {
     if (b && !b.disabled) setAnswer(b.dataset.answer);
   });
 
+  $('#card-edit').addEventListener('click', e => {
+    e.stopPropagation();                       // never counts as a reveal tap
+    if (current) openEdit(current.word.id);
+  });
+
+  $('#note-continue').addEventListener('click', closeNote);
+  $('#note-text').addEventListener('input', saveNoteField);
+  $('#note-edit').addEventListener('click', () => openEdit(noteWordId));
+
+  $('#edit-save').addEventListener('click', saveEdit);
+  $('#edit-cancel').addEventListener('click', closeEdit);
+  $('#edit-revert').addEventListener('click', revertEdit);
+  $('#edit-modal').addEventListener('click', e => {
+    if (e.target.id === 'edit-modal') closeEdit();     // click the backdrop to dismiss
+  });
+
+  // Weakest-cards rows open the editor, so a note can be written away from a session.
+  $('#weak-list').addEventListener('click', e => {
+    const row = e.target.closest('[data-word]');
+    if (row) openEdit(+row.dataset.word);
+  });
+
   $('#reveal').addEventListener('click', reveal);
   $('.card-body').addEventListener('click', () => revealed || reveal());
   $('#grades').addEventListener('click', e => {
@@ -886,9 +1093,27 @@ function bind() {
 
   document.addEventListener('keydown', e => {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName);
+
+    // Edit dialog owns the keyboard while it is open.
+    if (editWordId !== null) {
+      if (e.key === 'Escape') { e.preventDefault(); closeEdit(); }
+      else if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') { e.preventDefault(); saveEdit(); }
+      return;
+    }
+    // So does the note panel — but plain typing must reach the textarea untouched.
+    if (noteWordId !== null) {
+      if (e.key === 'Escape' || (e.key === 'Enter' && !e.shiftKey && !typing)) {
+        e.preventDefault();
+        closeNote();
+      }
+      return;
+    }
+    if (typing) return;
     if (!$('#view-study').classList.contains('active')) return;
     if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); revealed ? grade(2) : reveal(); }
     else if (e.key >= '1' && e.key <= '4' && revealed) { e.preventDefault(); grade(+e.key - 1); }
+    else if (e.key === 'e') { e.preventDefault(); if (current) openEdit(current.word.id); }
     else if (e.key === 'u') { e.preventDefault(); undo(); }
   });
 
@@ -900,7 +1125,8 @@ async function main() {
   try {
     const res = await fetch('data/vocab.json');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    WORDS = (await res.json()).words;
+    BASE_WORDS = (await res.json()).words;
+    applyEdits();
   } catch (err) {
     $('#empty').classList.remove('hidden');
     $('#card').classList.add('hidden');

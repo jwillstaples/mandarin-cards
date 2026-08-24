@@ -506,3 +506,155 @@ input[type=number] { width: 80px; }
   box-shadow: 0 4px 16px rgba(0, 0, 0, .3);
 }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* ── notes ───────────────────────────────────────────────── */
+
+.pill-btn {
+  appearance: none;
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--fg-dim);
+  cursor: pointer;
+  margin-left: auto;
+}
+.pill-btn:hover { color: var(--fg); border-color: var(--fg-dim); }
+
+.card-note {
+  margin-top: 14px;
+  padding: 11px 14px;
+  border-left: 3px solid var(--g2);
+  background: var(--panel-2);
+  border-radius: 0 8px 8px 0;
+  text-align: left;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--fg);
+  white-space: pre-wrap;
+}
+
+.note-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--g1);
+  border-radius: var(--radius);
+  padding: 16px;
+  min-height: 48vh;
+}
+.note-head {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--g1);
+  font-weight: 600;
+}
+.note-word {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 10px 0 18px;
+}
+.note-word .hz {
+  font-family: "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", sans-serif;
+  font-size: 40px;
+}
+.note-word .py { font-size: 20px; color: var(--accent); }
+.note-word .en { font-size: 16px; color: var(--fg-dim); }
+
+.note-lab { font-size: 13px; color: var(--fg-dim); }
+
+#note-text, #edit-note {
+  width: 100%;
+  margin-top: 6px;
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--fg);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 11px 13px;
+  resize: vertical;
+}
+#note-text:focus, #edit-note:focus, .modal input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.note-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 16px;
+}
+.note-actions .btn { flex: 1; padding: 14px; }
+.note-actions kbd { color: #fff; background: rgba(255,255,255,.16); border-color: transparent; }
+
+/* ── edit dialog ─────────────────────────────────────────── */
+
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, .6);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 24px 16px;
+  overflow-y: auto;
+  z-index: 30;
+}
+.modal-card {
+  width: 100%;
+  max-width: 460px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 20px;
+}
+.modal-card h3 { margin: 0 0 6px; font-size: 17px; }
+.modal-card label {
+  display: block;
+  margin: 14px 0 5px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--fg-dim);
+}
+.modal-card input[type=text] {
+  width: 100%;
+  font: inherit;
+  font-size: 17px;
+  color: var(--fg);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 11px 13px;
+}
+#edit-hz { font-family: "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", sans-serif; font-size: 24px; }
+
+.modal-actions { display: flex; align-items: center; gap: 8px; margin-top: 22px; }
+.modal-actions .spacer { flex: 1; }
+
+.weak-row { cursor: pointer; }
+.weak-row:hover { background: var(--panel-2); }
+.weak-row .mark {
+  font-style: normal;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--g2);
+  border: 1px solid var(--g2);
+  border-radius: 4px;
+  padding: 1px 5px;
+  margin-left: 4px;
+  white-space: nowrap;
+}

@@ -55,6 +55,8 @@
       <span id="lesson-label" class="pill ghost"></span>
       <span id="strength-label" class="pill ghost"></span>
       <span id="extra-label" class="pill ghost hidden">extra rep</span>
+      <span id="note-label" class="pill ghost hidden">note</span>
+      <button id="card-edit" class="pill-btn" title="Edit this card">edit</button>
     </div>
 
     <div class="card-body">
@@ -71,6 +73,18 @@
         <button class="btn grade g3" data-grade="2"><span>Good</span><em id="iv2"></em><kbd>3</kbd></button>
         <button class="btn grade g4" data-grade="3"><span>Easy</span><em id="iv3"></em><kbd>4</kbd></button>
       </div>
+    </div>
+  </div>
+
+  <div id="note-panel" class="note-panel hidden">
+    <div class="note-head">You missed this one</div>
+    <div id="note-word" class="note-word"></div>
+    <label for="note-text" class="note-lab">Your note</label>
+    <textarea id="note-text" rows="5"
+      placeholder="A mnemonic, the word you keep confusing it with, an example sentence — whatever will make it stick next time."></textarea>
+    <div class="note-actions">
+      <button id="note-edit" class="btn">Edit card</button>
+      <button id="note-continue" class="btn primary">Continue <kbd>↵</kbd></button>
     </div>
   </div>
 
@@ -226,6 +240,33 @@
 </section>
 
 </main>
+
+<div id="edit-modal" class="modal hidden">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-label="Edit card">
+    <h3>Edit card</h3>
+    <p class="hint" id="edit-origin"></p>
+
+    <label for="edit-hz">汉字</label>
+    <input id="edit-hz" type="text" autocomplete="off" spellcheck="false">
+
+    <label for="edit-py">PĪnyīn</label>
+    <input id="edit-py" type="text" autocomplete="off" spellcheck="false">
+
+    <label for="edit-en">English</label>
+    <input id="edit-en" type="text" autocomplete="off">
+    <p class="hint">Separate alternative meanings with <code>/</code> — any one of them counts as the answer.</p>
+
+    <label for="edit-note">Note</label>
+    <textarea id="edit-note" rows="4"></textarea>
+
+    <div class="modal-actions">
+      <button id="edit-revert" class="btn danger">Revert to original</button>
+      <span class="spacer"></span>
+      <button id="edit-cancel" class="btn">Cancel</button>
+      <button id="edit-save" class="btn primary">Save</button>
+    </div>
+  </div>
+</div>
 
 <div id="toast" class="toast"></div>
 

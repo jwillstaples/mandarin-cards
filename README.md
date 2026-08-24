@@ -132,6 +132,32 @@ that wasn't due yet is not evidence you'd still know it at the full interval, so
 *Hard* / *Good* / *Easy* leave the level and due date untouched. *Again* still demotes:
 forgetting early is real information.
 
+## Notes and editing
+
+Rating a card **Again** holds the queue and opens a note panel for that word, showing any
+note you have already written and letting you write or amend one on the spot. A miss is
+the moment a mnemonic is both most useful and most likely to occur to you, so the note is
+not flashed past on the way to the next card. Notes also appear as a marker on the card
+and beneath the answer on reveal.
+
+Any card can be edited — the `edit` button on the card, `e` on the keyboard, *Edit card*
+in the note panel, or clicking a row in the Stats weakest-cards list. Hanzi, pinyin, the
+English glosses and the note are all editable.
+
+Edits never touch `data/vocab.json`, which is replaced wholesale whenever the vocabulary
+is refreshed. They live in `state.edits` as **field-level diffs against the shipped word**
+and are layered on at load, which has three consequences worth knowing:
+
+- *Revert to original* is always available, because the shipped data is still there.
+- Typing a field back to its original value drops the override by itself, so a card stops
+  being pinned to your correction the moment it no longer differs.
+- A vocabulary refresh still improves fields you never edited.
+
+Notes are keyed by word, not by card, so one mnemonic serves all four directions. On
+import, notes are **concatenated rather than replaced** when both devices have one for
+the same word — a note written on your phone is never silently dropped by a laptop
+import.
+
 ## Releasing vocabulary
 
 New words do not trickle in on a schedule. A word enters the queue only once it has been
