@@ -158,6 +158,17 @@ import, notes are **concatenated rather than replaced** when both devices have o
 the same word — a note written on your phone is never silently dropped by a laptop
 import.
 
+## Hiding words
+
+`hide` on the card, `h` on the keyboard, or *Don't show this word again* in the editor
+retires a word from the queue. Hidden words are excluded from the deck itself, so they
+never surface as new, due, learning or extra reps, and release never hands one back.
+
+Hiding is **not** deletion: the card records, notes and edits all survive untouched, so
+restoring a word returns the memory you had built rather than starting it over as new.
+Hidden words are listed in Setup with a *Restore* button each and a *Restore all*, and
+the panel disappears when nothing is hidden.
+
 ## Releasing vocabulary
 
 New words do not trickle in on a schedule. A word enters the queue only once it has been
@@ -187,7 +198,8 @@ day, clears the due queue daily, and leaves **no** level-6-or-higher card untouc
 ## Keyboard
 
 `space` reveals, then `space` again grades *Good*. `1`–`4` grade Again / Hard / Good /
-Easy. `u` undoes the last grade.
+Easy. `e` edits the current card, `h` hides it, `u` undoes the last grade. Shortcuts stay
+out of the way while a text field has focus, and `Esc` closes whichever panel is open.
 
 ## Moving progress between devices
 

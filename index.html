@@ -56,7 +56,10 @@
       <span id="strength-label" class="pill ghost"></span>
       <span id="extra-label" class="pill ghost hidden">extra rep</span>
       <span id="note-label" class="pill ghost hidden">note</span>
-      <button id="card-edit" class="pill-btn" title="Edit this card">edit</button>
+      <span class="meta-actions">
+        <button id="card-edit" class="pill-btn" title="Edit this card (e)">edit</button>
+        <button id="card-hide" class="pill-btn" title="Never show this word again (h)">hide</button>
+      </span>
     </div>
 
     <div class="card-body">
@@ -215,6 +218,17 @@
     </div>
   </div>
 
+  <div class="panel" id="hidden-panel">
+    <h2>Hidden words</h2>
+    <p class="hint">Words you have retired from the queue. Their review history, notes and
+       edits are kept, so restoring one brings back the memory you had rather than starting
+       it again from scratch.</p>
+    <div id="hidden-list" class="hidden-list"></div>
+    <div class="row" style="margin-top:12px">
+      <button id="btn-unhide-all" class="btn">Restore all</button>
+    </div>
+  </div>
+
   <div class="panel">
     <h2>Progress data</h2>
     <p class="hint">Progress is stored in this browser only. Export on one device and import on the
@@ -258,6 +272,10 @@
 
     <label for="edit-note">Note</label>
     <textarea id="edit-note" rows="4"></textarea>
+
+    <button id="edit-hide" class="btn danger wide" style="margin-top:18px">
+      Don't show this word again
+    </button>
 
     <div class="modal-actions">
       <button id="edit-revert" class="btn danger">Revert to original</button>

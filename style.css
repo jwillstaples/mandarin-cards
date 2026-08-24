@@ -658,3 +658,28 @@ input[type=number] { width: 80px; }
   margin-left: 4px;
   white-space: nowrap;
 }
+
+/* ── hidden words ────────────────────────────────────────── */
+
+/* Keep the two actions together as one right-aligned group, so they wrap as a
+   unit instead of hide dropping to a line of its own. */
+.meta-actions { display: flex; gap: 6px; margin-left: auto; }
+.pill-btn { margin-left: 0; }
+#card-hide:hover, #edit-hide:hover { color: var(--g1); border-color: var(--g1); }
+
+.hidden-list { display: flex; flex-direction: column; gap: 1px; }
+.hidden-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 9px 4px;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+}
+.hidden-row .hz {
+  font-family: "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", sans-serif;
+  font-size: 20px;
+}
+.hidden-row .py { color: var(--fg-dim); }
+.hidden-row .en { flex: 1; overflow-wrap: anywhere; }
+.hidden-row .btn { padding: 5px 11px; font-size: 13px; }

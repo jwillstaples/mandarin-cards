@@ -49,6 +49,7 @@ const DEFAULTS = () => ({
   cards: {},                                   // "id:dir" -> {l, due, reps, lapses, last}
   notes: {},                                   // word id -> free text, surfaced on a miss
   edits: {},                                   // word id -> {hz, py, en} overriding the shipped data
+  hidden: {},                                  // word id -> true, retired from the queue
   hist: {},                                    // "YYYY-MM-DD" -> review count
   daily: { date: '', used: {} },               // new cards introduced today, per direction
   settings: {
@@ -202,6 +203,41 @@ const wordById = id => WORDS[id] && WORDS[id].id === id
 
 const noteFor = id => (state.notes[id] || '').trim();
 
+/* ── hidden words ───────────────────────────────────────── */
+
+/* Retiring a word takes it out of the deck but leaves its card records, notes and
+ * edits untouched, so restoring it returns the memory you had rather than starting
+ * it over as new. */
+const isHidden = w => !!state.hidden[typeof w === 'object' ? w.id : w];
+
+const hiddenWords = () =>
+  Object.keys(state.hidden).map(id => wordById(+id)).filter(Boolean);
+
+function hideWord(id) {
+  const w = wordById(id);
+  if (!w) return;
+  state.hidden[id] = true;
+  save();
+  toast(`${w.hz} hidden — restore it in Setup.`);
+
+  // Whatever surface asked for this, the word must leave the screen immediately.
+  if (noteWordId === id) {
+    noteWordId = null;
+    $('#note-panel').classList.add('hidden');
+  }
+  if (editWordId === id) closeEdit();
+  renderRelease();
+  drawCard();
+}
+
+function unhideWord(id) {
+  delete state.hidden[id];
+  save();
+  renderHidden();
+  renderRelease();
+  drawCard();
+}
+
 /* ── deck selection ─────────────────────────────────────── */
 
 function inRange(w) {
@@ -209,7 +245,7 @@ function inRange(w) {
   return w.s < s.maxSection || (w.s === s.maxSection && w.u <= s.maxUnit);
 }
 
-const deck = () => WORDS.filter(inRange);
+const deck = () => WORDS.filter(w => inRange(w) && !isHidden(w));
 const activeDirs = () => state.settings.dirs.filter(c => DIR_BY_CODE[c]);
 
 /* Words are stored in course order, so ids double as a position in the course and
@@ -469,7 +505,12 @@ function drawCard(keep) {
     cardEl.classList.add('hidden');
     emptyEl.classList.remove('hidden');
     const c = counts();
-    emptyEl.innerHTML = c.held && !c.released
+    const hid = hiddenWords().length;
+    emptyEl.innerHTML = (!c.words && hid)
+      ? `<p>Every word in range is hidden.</p>
+         <p class="sub">${hid} hidden word${hid === 1 ? '' : 's'} — restore some in
+         <b>Setup</b>, or widen the vocabulary range.</p>`
+      : c.held && !c.released
       ? `<p>No words released yet.</p>
          <p class="sub">${c.held} words are in range and waiting.
          Open <b>Setup</b> and release as many as you want to study.</p>`
@@ -775,6 +816,7 @@ function renderStats() {
     ['Mature', c.mature],
     ['Due now', c.due],
     ['New left today', c.newLeft],
+    ['Hidden', hiddenWords().length],
   ].map(([k, v]) => `<div class="tile"><b>${v}</b><span>${k}</span></div>`).join('');
 
   // stacked bars, one row per direction
@@ -828,6 +870,18 @@ function renderStats() {
     </div>`).join('') || '<p class="hint">Nothing reviewed yet.</p>';
 }
 
+function renderHidden() {
+  const words = hiddenWords().sort((a, b) => a.s - b.s || a.u - b.u || a.id - b.id);
+  $('#hidden-panel').classList.toggle('hidden', words.length === 0);
+  $('#hidden-list').innerHTML = words.map(w => `
+    <div class="hidden-row">
+      <span class="hz">${esc(w.hz)}</span>
+      <span class="py">${esc(showPinyin(w.py))}</span>
+      <span class="en">${esc(w.en.join(' / '))}</span>
+      <button class="btn" data-unhide="${w.id}">Restore</button>
+    </div>`).join('');
+}
+
 /* ── setup view ─────────────────────────────────────────── */
 
 function maxUnitIn(section) {
@@ -861,6 +915,7 @@ function renderSetup() {
   $('#show-tones').value = s.tones;
   renderTemp();
   renderRelease();
+  renderHidden();
 }
 
 function renderTemp() {
@@ -1004,11 +1059,16 @@ function bindSetup() {
       for (const [id, e] of Object.entries(got.edits || {})) {
         if (!state.edits[id]) { state.edits[id] = e; edits++; }
       }
+      let hid = 0;
+      for (const id of Object.keys(got.hidden || {})) {
+        if (!state.hidden[id]) { state.hidden[id] = true; hid++; }
+      }
       applyEdits();
       pruneHist();
       save();
       $('#io-msg').textContent =
-        `Imported: ${added} new records, ${merged} updated, ${notes} notes, ${edits} edited cards.`;
+        `Imported: ${added} new records, ${merged} updated, ${notes} notes, ` +
+        `${edits} edited cards, ${hid} hidden.`;
       drawCard();
     } catch (err) {
       $('#io-msg').textContent = `Import failed: ${err.message}`;
@@ -1067,6 +1127,25 @@ function bind() {
     if (current) openEdit(current.word.id);
   });
 
+  $('#card-hide').addEventListener('click', e => {
+    e.stopPropagation();
+    if (current) hideWord(current.word.id);
+  });
+  $('#edit-hide').addEventListener('click', () => {
+    if (editWordId !== null) hideWord(editWordId);
+  });
+  $('#hidden-list').addEventListener('click', e => {
+    const b = e.target.closest('[data-unhide]');
+    if (b) unhideWord(+b.dataset.unhide);
+  });
+  $('#btn-unhide-all').addEventListener('click', () => {
+    const n = hiddenWords().length;
+    state.hidden = {};
+    save();
+    renderHidden(); renderRelease(); drawCard();
+    toast(`Restored ${n} word${n === 1 ? '' : 's'}.`);
+  });
+
   $('#note-continue').addEventListener('click', closeNote);
   $('#note-text').addEventListener('input', saveNoteField);
   $('#note-edit').addEventListener('click', () => openEdit(noteWordId));
@@ -1114,6 +1193,7 @@ function bind() {
     if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); revealed ? grade(2) : reveal(); }
     else if (e.key >= '1' && e.key <= '4' && revealed) { e.preventDefault(); grade(+e.key - 1); }
     else if (e.key === 'e') { e.preventDefault(); if (current) openEdit(current.word.id); }
+    else if (e.key === 'h') { e.preventDefault(); if (current) hideWord(current.word.id); }
     else if (e.key === 'u') { e.preventDefault(); undo(); }
   });
 
