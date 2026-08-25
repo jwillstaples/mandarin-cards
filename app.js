@@ -1214,9 +1214,15 @@ function bind() {
       else if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') { e.preventDefault(); saveEdit(); }
       return;
     }
-    // So does the note panel — but plain typing must reach the textarea untouched.
+    /* So does the note panel — but plain typing must reach the textarea untouched.
+     * Tab continues even from inside the textarea: it is the only dismiss key on the
+     * left half of a QWERTY keyboard, which together with space and 1-4 makes the
+     * whole review loop one-handed. It costs Tab's usual focus-cycling here, which is
+     * a fair trade for a two-control panel. closeNote() writes the textarea through
+     * first, so nothing typed is lost on the way out. */
     if (noteWordId !== null) {
-      if (e.key === 'Escape' || (e.key === 'Enter' && !e.shiftKey && !typing)) {
+      if (e.key === 'Tab' || e.key === 'Escape' ||
+          (e.key === 'Enter' && !e.shiftKey && !typing)) {
         e.preventDefault();
         closeNote();
       }

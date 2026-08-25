@@ -201,6 +201,11 @@ day, clears the due queue daily, and leaves **no** level-6-or-higher card untouc
 Easy. `e` edits the current card, `h` hides it, `u` undoes the last grade. Shortcuts stay
 out of the way while a text field has focus, and `Esc` closes whichever panel is open.
 
+In the note panel, **`Tab` continues** — from inside the textarea as well, so a note can
+be typed and dismissed without leaving the keyboard. `Enter` still works. Tab is the only
+dismiss key on the left half of a QWERTY layout, so `space` to reveal, `1`–`4` to grade
+and `Tab` to clear a note make the review loop operable with the left hand alone.
+
 ## Moving progress between devices
 
 `localStorage` is scoped to an **origin**, not to a machine. `http://localhost:8731` and
