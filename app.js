@@ -1039,6 +1039,7 @@ function bindSetup() {
     try {
       const got = JSON.parse(await file.text());
       if (!got || typeof got.cards !== 'object') throw new Error('not a progress file');
+      const hadCards = Object.keys(state.cards).length > 0;
       let merged = 0, added = 0;
       for (const [k, v] of Object.entries(got.cards)) {
         const mine = state.cards[k];
@@ -1063,12 +1064,45 @@ function bindSetup() {
       for (const id of Object.keys(got.hidden || {})) {
         if (!state.hidden[id]) { state.hidden[id] = true; hid++; }
       }
+
+      /* Settings were previously ignored, which quietly broke the main reason to
+       * import at all: the cards arrived but the release pointer stayed at 0, so no
+       * new word could enter the queue on the new device.
+       *
+       * A fresh install has nothing to protect, so treat that as a migration and
+       * adopt the file's settings wholesale. Otherwise this is a merge between two
+       * devices in use, and only the fields that represent progress — how far the
+       * course has been released, how far the range extends — are carried over, by
+       * taking whichever is further along. Display preferences stay local. */
+      const gs = got.settings || {};
+      const fresh = !hadCards;
+      let settingsNote = '';
+      if (fresh && Object.keys(gs).length) {
+        state.settings = Object.assign(DEFAULTS().settings, gs);
+        settingsNote = ', settings adopted';
+      } else {
+        if (typeof gs.released === 'number' && gs.released > state.settings.released) {
+          state.settings.released = gs.released;
+          settingsNote = ', release pointer advanced';
+        }
+        const mine = [state.settings.maxSection, state.settings.maxUnit];
+        const theirs = [gs.maxSection, gs.maxUnit];
+        if (Number.isFinite(theirs[0]) && Number.isFinite(theirs[1]) &&
+            (theirs[0] > mine[0] || (theirs[0] === mine[0] && theirs[1] > mine[1]))) {
+          state.settings.maxSection = theirs[0];
+          state.settings.maxUnit = theirs[1];
+          settingsNote += ', range widened';
+        }
+      }
+
       applyEdits();
       pruneHist();
       save();
+      renderSetup();
+      renderDirBar();
       $('#io-msg').textContent =
         `Imported: ${added} new records, ${merged} updated, ${notes} notes, ` +
-        `${edits} edited cards, ${hid} hidden.`;
+        `${edits} edited cards, ${hid} hidden${settingsNote}.`;
       drawCard();
     } catch (err) {
       $('#io-msg').textContent = `Import failed: ${err.message}`;

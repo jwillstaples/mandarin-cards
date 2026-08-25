@@ -203,6 +203,24 @@ out of the way while a text field has focus, and `Esc` closes whichever panel is
 
 ## Moving progress between devices
 
-`localStorage` is per-device, so Setup → **Export JSON** and **Import JSON** move it.
-Import merges rather than overwrites: for each card it keeps whichever record has the
-higher review count.
+`localStorage` is scoped to an **origin**, not to a machine. `http://localhost:8731` and
+`https://<user>.github.io` are different origins, so progress built against the local
+server is invisible to the published site and vice versa — this is the browser's
+same-origin rule, not something the app can reach around. The same applies between two
+devices.
+
+Setup → **Export JSON** and **Import JSON** move it. Import merges rather than
+overwrites:
+
+- **Cards** — whichever record has the higher review count wins.
+- **Notes** — concatenated when both sides have one, so neither is silently dropped.
+- **Edits and hidden words** — unioned; existing local entries are not replaced.
+- **History** — the larger daily count wins.
+- **Settings** — if the receiving device has no cards at all, this is a migration rather
+  than a merge, so the file's settings are adopted wholesale. Otherwise only the fields
+  that represent progress are carried over, by taking whichever is further along: the
+  release pointer and the vocabulary range. Display preferences stay local, and nothing
+  ever moves backwards.
+
+Importing without the settings step leaves the cards in place but the release pointer at
+zero, which looks like a working import until no new word will enter the queue.
